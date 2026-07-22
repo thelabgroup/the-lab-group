@@ -5,3 +5,6 @@ README.md
 
 # Internal notes — tracked in git, but never served from the public site.
 docs
+
+# Deployed as its own Railway service; nothing here belongs in the web root.
+forms-api

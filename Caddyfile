@@ -21,6 +21,13 @@
 		@private path /Caddyfile /Dockerfile /railway.json /.dockerignore
 		error @private 404
 
+		# Contact form submissions. Proxying over Railway's private network keeps
+		# the handler off the public internet and keeps the POST same-origin, so
+		# no CORS preflight and no third-party domain in the form path.
+		reverse_proxy /api/* forms.railway.internal:3000 {
+			header_up X-Forwarded-For {http.request.remote.host}
+		}
+
 		# Serve /pricing/pricing.html for /pricing/pricing as well as the explicit path.
 		try_files {path} {path}.html {path}/index.html
 		file_server
