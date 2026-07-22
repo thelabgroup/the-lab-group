@@ -1,0 +1,45 @@
+{
+	admin off
+	persist_config off
+	# Railway terminates TLS at the edge; Caddy serves plain HTTP behind it.
+	auto_https off
+	log {
+		format console
+	}
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:{$PORT:8080} {
+	root * /srv
+	encode gzip zstd
+
+	# Serve /pricing/pricing.html for /pricing/pricing as well as the explicit path.
+	try_files {path} {path}.html {path}/index.html
+	file_server
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	# Webflow exports are not content-hashed, so assets get a short TTL rather
+	# than immutable caching — a re-export with the same filename must not be
+	# pinned in visitors' browsers. ETags still make revalidation cheap.
+	@assets path *.css *.js *.svg *.png *.jpg *.jpeg *.gif *.webp *.ico *.woff *.woff2 *.ttf *.eot
+	header @assets Cache-Control "public, max-age=86400"
+
+	@html path *.html /
+	header @html Cache-Control "public, max-age=0, must-revalidate"
+
+	handle_errors {
+		@404 expression {err.status_code} == 404
+		handle @404 {
+			rewrite * /404.html
+			file_server
+		}
+	}
+}
