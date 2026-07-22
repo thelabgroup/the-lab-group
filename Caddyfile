@@ -21,6 +21,75 @@
 		@private path /Caddyfile /Dockerfile /railway.json /.dockerignore
 		error @private 404
 
+		# Contact form submissions. Proxying over Railway's private network keeps
+		# the handler off the public internet and keeps the POST same-origin, so
+		# no CORS preflight and no third-party domain in the form path.
+		reverse_proxy /api/* forms.railway.internal:3000 {
+			header_up X-Forwarded-For {http.request.remote.host}
+		}
+
+		# Asset directories hold no page. Refuse them outright rather than
+		# relying on the absence of an index file to produce the 404.
+		@assetdirs path /css /css/ /js /js/ /images /images/ /fonts /fonts/
+		error @assetdirs 404
+
+		# Pages with no inbound link from the homepage nav: empty drafts under
+		# company/, superseded pricing tables, the orphaned products/ set and
+		# stale duplicates of live pages. They still ship so nothing is lost,
+		# but they are not public. Webflow used to gate these on its own
+		# hosting; that enforcement did not survive the static export.
+		#
+		# Prefixes are wildcarded because the canonicalisation rules below have
+		# not run yet, so both /pricing/pricing and /pricing/pricing.html arrive
+		# here and both must be caught. Gating before the redirects means even
+		# the 301 requires credentials.
+		#
+		# /search* also covers /search-index.json deliberately. The index holds
+		# extracted body text for every page it covers, including these ones —
+		# leaving it public would serve their contents in JSON to anyone who
+		# asks. It is only ever fetched by /search, which is gated, so the two
+		# have to move together. If /search is ever made public, the index must
+		# first be rebuilt to exclude everything listed here.
+		#
+		# Not gated, deliberately: /404.html (handle_errors serves it to
+		# unauthenticated visitors, so gating it turns every 404 into a login
+		# prompt) and /api/* (the public contact form on /helpsupport posts there).
+		#
+		# Linking any of these into the nav without removing it from this list
+		# gives visitors a public link that answers 401. solutions/pubs and
+		# solutions/entertainment are the likely candidates — the nav already
+		# carries an "Entertainment" label, pointing at /solutions/restaurants.
+		# tools/build-sitemap.mjs parses this list, so keep it one path per token.
+		@gated path /company/* /pricing/* /products/* /search* /solutions/entertainment* /solutions/pubs* /support* /401*
+		basic_auth @gated {
+			{$SITE_USER:tlg} {$SITE_PASS_HASH:$2b$12$N.laQFCDzGtD9cehQKaF3.bUSYZ.ljFlR9fIAaClb5UwfnKVKg8iG}
+		}
+
+		# URL canonicalisation. Position in this route is load-bearing twice
+		# over: it sits after reverse_proxy so an /api/* POST can never be
+		# answered with a 301 (which clients may replay as GET, silently
+		# dropping the body), and before try_files so the matchers below see
+		# the URL as requested. try_files rewrites internally and does not
+		# re-enter these handlers, so none of this loops.
+
+		# /index.html -> /. Must precede the .html rule, which would otherwise
+		# strand it on a bare /index.
+		@indexhtml path /index.html
+		redir @indexhtml / 301
+
+		# /solutions/cafes.html -> /solutions/cafes. Webflow only ever served
+		# the extensionless form, so every .html twin is a duplicate URL.
+		@htmlext path_regexp hext ^(/.+)\.html$
+		redir @htmlext {re.hext.1} 301
+
+		# /solutions/cafes/ -> /solutions/cafes. This also strips the slash from
+		# a real directory, which is safe: file_server suppresses its own
+		# canonical trailing-slash redirect for paths try_files has rewritten,
+		# so a directory that gains an index.html is served rather than bounced
+		# back here. Verified against Caddy 2.11 both with and without an index.
+		@trailingslash path_regexp tslash ^(/.+)/$
+		redir @trailingslash {re.tslash.1} 301
+
 		# Serve /pricing/pricing.html for /pricing/pricing as well as the explicit path.
 		try_files {path} {path}.html {path}/index.html
 		file_server
@@ -42,16 +111,26 @@
 	@html path *.html /
 	header @html Cache-Control "public, max-age=0, must-revalidate"
 
-	# The search index has to track the pages it describes, so it revalidates
-	# on the same terms as the HTML rather than sitting in cache for a day.
-	@search-index path /search-index.json
-	header @search-index Cache-Control "public, max-age=0, must-revalidate"
+	# Both files are derived from the pages and have to track them, so they
+	# revalidate on the same terms as the HTML rather than sitting in cache for
+	# a day. A stale sitemap sends crawlers to URLs that have since moved.
+	@generated path /search-index.json /sitemap.xml
+	header @generated Cache-Control "public, max-age=0, must-revalidate"
 
 	handle_errors {
 		@404 expression {err.status_code} == 404
 		handle @404 {
 			rewrite * /404.html
 			file_server
+		}
+
+		# basic_auth rejects by returning a 401 *error*, which lands here. Without
+		# a catch-all the block matches, finds no handler and returns an empty
+		# 200 — the browser then never sees the challenge and never prompts.
+		# WWW-Authenticate is already set on the response writer by this point,
+		# so re-stating the status is all that is needed.
+		handle {
+			respond "{err.status_code} {err.status_text}" {err.status_code}
 		}
 	}
 }

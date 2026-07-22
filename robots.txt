@@ -1,0 +1,17 @@
+# The paths below are behind HTTP basic auth (see Caddyfile), so a crawler
+# cannot read them regardless. Listing them here stops search engines from
+# indexing the bare URLs off the back of an external link and surfacing them
+# as contentless results.
+
+User-agent: *
+Disallow: /company/
+Disallow: /pricing/
+Disallow: /products/
+Disallow: /search
+Disallow: /search-index.json
+Disallow: /solutions/entertainment
+Disallow: /solutions/pubs
+Disallow: /support
+Disallow: /401
+
+Sitemap: https://web-production-c6b60.up.railway.app/sitemap.xml

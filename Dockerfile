@@ -8,7 +8,14 @@ COPY . .
 # Regenerate the search index from the pages as they exist in this build. The
 # committed copy is only there for local preview — building it here is what
 # stops a re-export from shipping results that point at stale content.
+# SITE_URL sets the origin written into sitemap.xml and robots.txt. Override it
+# at build time once a real domain fronts this service.
+ARG SITE_URL
+
+# build-sitemap reads the basic_auth gate list out of the Caddyfile to decide
+# what stays out of the sitemap, so both must run before the config is stripped.
 RUN node tools/build-search-index.mjs \
+ && node tools/build-sitemap.mjs \
  && rm -rf tools \
  && rm -f Dockerfile Caddyfile .dockerignore railway.json
 

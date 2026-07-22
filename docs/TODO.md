@@ -72,6 +72,29 @@ appear in search results while being invisible to users.
       e.g. [index.html:164-330](../index.html#L164-L330)). Any nav change requires 33 edits and they
       will drift. Extract to `js/mega-menu.js` and include it once per page.
 
+### Routing — open items
+
+Everything else from the redirect investigation is fixed in the Caddyfile. These two are not,
+because neither can be settled without information the repo does not contain.
+
+- [ ] **The Webflow 301 redirect table was never migrated — blocked on an export.** Webflow keeps
+      it in Site Settings → Publishing → 301 Redirects, and it is not part of a static export, so
+      commit `2610ed5` brought across the pages and none of the redirects. Every old URL that
+      relied on one now falls through to a 404. Nothing in this repo records what those rules were;
+      the list has to come out of the Webflow project (or from Search Console's crawl errors if the
+      project is gone). Once exported, each rule becomes a `redir <old> <new> 301` in the Caddyfile.
+- [ ] **Content directory roots 404 — needs a destination decision, not a config change.**
+      `/pricing`, `/solutions`, `/products`, `/company`, `/support` and `/footer` have no index
+      page, so they 404. That is the correct default and was left deliberately: none of them has an
+      unambiguous target, and redirecting a directory to an unrelated page (the homepage, say) is
+      treated as a soft 404 by search engines, which is worse than the 404 itself. `/pricing` is
+      the tempting exception — but per the pricing notes above, `pricing-1.html` is an unshipped
+      calculator with three open bugs and a GBP/USD conflict, so pointing a public URL at it would
+      surface exactly the page that is not ready. Either build real index pages for these folders
+      (`/solutions` is the one with a genuine case — 11 live pages sit under it) or leave the 404s.
+      Asset directories (`/css`, `/js`, `/images`, `/fonts`) are a separate matter and now return an
+      explicit 404 rather than an incidental one.
+
 ---
 
 *Out of scope for this list but found in the same audit — tracked separately: three bugs in the

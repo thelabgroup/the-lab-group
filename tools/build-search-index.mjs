@@ -24,6 +24,15 @@ const SKIP_DIRS = new Set([
 // leftover duplicates from the export.
 const SKIP_PAGES = new Set(['401.html', '404.html', 'search.html', 'pricing/pricing-1-copy.html'])
 
+// NOTE: the index still covers the pages gated by basic_auth in the Caddyfile
+// (company/, pricing/, products/, support*, solutions/{pubs,entertainment}),
+// and stores their extracted body text. That is intended — search runs on
+// /search, which is behind the same gate, so results may reference them.
+// It also means search-index.json is as sensitive as those pages: it is served
+// from a path the gate covers, and must stay that way. Before exposing /search
+// publicly, add the gated pages to SKIP_PAGES above, or the index will hand
+// their contents to anyone who requests the JSON.
+
 // Boilerplate the template shipped on pages that were never given real
 // metadata. Indexing it makes every such page match "module", "webflow" and
 // "landing", which is worse than having no description at all.

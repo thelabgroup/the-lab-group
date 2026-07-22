@@ -1,0 +1,18 @@
+{
+  "name": "the-lab-group-forms-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Contact form handler for thelabgroup.com — stores submissions in Postgres and notifies by email.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16",
+    "pg": "^8.13.1"
+  }
+}
