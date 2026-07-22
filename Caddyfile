@@ -15,9 +15,16 @@
 	root * /srv
 	encode gzip zstd
 
-	# Serve /pricing/pricing.html for /pricing/pricing as well as the explicit path.
-	try_files {path} {path}.html {path}/index.html
-	file_server
+	# route{} runs these in written order, unlike top-level directives.
+	route {
+		# Build/deploy config must never be readable from the document root.
+		@private path /Caddyfile /Dockerfile /railway.json /.dockerignore
+		error @private 404
+
+		# Serve /pricing/pricing.html for /pricing/pricing as well as the explicit path.
+		try_files {path} {path}.html {path}/index.html
+		file_server
+	}
 
 	header {
 		-Server
