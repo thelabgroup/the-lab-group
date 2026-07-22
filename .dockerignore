@@ -2,3 +2,6 @@
 .gitignore
 .github
 README.md
+
+# Internal notes — tracked in git, but never served from the public site.
+docs
