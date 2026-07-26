@@ -74,15 +74,63 @@ appear in search results while being invisible to users.
 
 ### Routing — open items
 
-Everything else from the redirect investigation is fixed in the Caddyfile. These two are not,
-because neither can be settled without information the repo does not contain.
+The redirect investigation is otherwise closed: the trailing-slash, `.html` and directory 404s
+are fixed in the Caddyfile, and the Webflow 301 table turned out to be empty (below). What remains
+are domain-level items that can't be settled from inside this repo — they need a decision about the
+`www.thelabgroup.com` domain and access to wherever it is now hosted.
 
-- [ ] **The Webflow 301 redirect table was never migrated — blocked on an export.** Webflow keeps
-      it in Site Settings → Publishing → 301 Redirects, and it is not part of a static export, so
-      commit `2610ed5` brought across the pages and none of the redirects. Every old URL that
-      relied on one now falls through to a 404. Nothing in this repo records what those rules were;
-      the list has to come out of the Webflow project (or from Search Console's crawl errors if the
-      project is gone). Once exported, each rule becomes a `redir <old> <new> 301` in the Caddyfile.
+- [x] **The Webflow 301 redirect table is empty — nothing to migrate.** Established without needing
+      the Webflow account, from two independent directions:
+      1. The original site is still published at `thelabgroup.webflow.io` (identical `<title>`,
+         404s on bogus paths, so its routing is live and readable). 82 distinct URLs were probed
+         against it — every path the Wayback Machine ever captured on `thelabgroup.com`, plus 44
+         plausible slugs (`/pricing`, `/contact`, `/blog`, `/cafes`, `/privacy-policy`, the
+         un-prefixed product and solution names…). **Zero returned a redirect.**
+      2. Every 3xx the archive holds for `thelabgroup.com` is infrastructure, not content:
+         `http://` → `https://www.`, a Dan.com domain-parking redirect from Dec 2021 (the domain
+         was for sale then — the Webflow site's tenure was short), and a 2002–03 ASP site
+         unrelated to this business. **No path-level redirect was ever captured.**
+
+      Two useful by-products of that probe. Webflow's own canonicalisation was
+      `/solutions/cafes/` → 301 → `/solutions/cafes`, which the Caddyfile's trailing-slash rule now
+      reproduces exactly; and `.html` URLs 404'd on Webflow, so the `.html` → extensionless 301 is
+      strictly additive rather than a behaviour change. The 14 URLs the archive holds for the
+      Webflow era are also an exact match for the 14 in `sitemap.xml`, which independently confirms
+      the basic_auth gate isn't hiding anything that was ever publicly crawled.
+
+      Residual caveat: this assumes Webflow surfaces a user-configured redirect table on the
+      `.webflow.io` staging domain. If that assumption is wrong, direction 1 proves nothing — but
+      direction 2 is independent of it and reaches the same conclusion.
+
+- [ ] **`www.thelabgroup.com` no longer serves this site, and every old URL is now a soft 404.**
+      That domain *was* this site's home — the archive has it serving the matching
+      `<title>` ("Tech-enabled services for the hospitality sector") as late as 1 Jan 2026. It now
+      serves a different, unrelated page ("Investing in exceptional hospitality businesses",
+      9,338 bytes) from Cloudflare Pages, with a SPA-style catch-all: **all 14** previously-crawled
+      URLs return `200` with that page instead of their content, verified 22 Jul 2026. Apex behaves
+      identically.
+
+      A soft 404 is worse than a 404. A visitor following an old link gets no signal the content
+      moved, and search engines keep the URLs indexed against the wrong content rather than
+      dropping or re-pointing them.
+
+      **Deferred — not being actioned now (noted 26 Jul 2026).** Needs a decision first: is the
+      Cloudflare Pages site a deliberate replacement, or did it displace this site without the
+      redirects being planned? That answer picks the fix:
+      - *If this Railway service is meant to be the live site:* point `www.thelabgroup.com` at it
+        (and settle apex-vs-www canonicalisation, next item).
+      - *If the Cloudflare page is intended to stay:* give it a real 404 for unknown paths, and add
+        301s from the 14 old URLs to wherever that content now lives.
+
+      Either way it is a domain/hosting change made outside this repo, not a Caddyfile edit — the
+      Caddyfile only takes effect once traffic reaches this service. The 14 affected URLs are the
+      `<loc>` entries in `sitemap.xml`.
+
+- [ ] **Host canonicalisation, once a real domain is attached.** The archive shows the apex
+      301'd to `https://www.`, so apex and `www` must not both serve. Railway terminates TLS and
+      the Caddyfile runs `auto_https off`, so this is settled at the domain layer, and `SITE_URL`
+      rebuilt to match (see `tools/build-sitemap.mjs`). Until then `sitemap.xml` points at the
+      Railway service domain.
 - [ ] **Content directory roots 404 — needs a destination decision, not a config change.**
       `/pricing`, `/solutions`, `/products`, `/company`, `/support` and `/footer` have no index
       page, so they 404. That is the correct default and was left deliberately: none of them has an
@@ -102,3 +150,29 @@ pricing calculator (`payAtEnd` has no recalculation listener, a literal `'RESULT
 string renders to users, and an unguarded `prices[n]` lookup throws for `n < 5`), the four contact
 forms being tethered to Webflow's hosted form API, and the unpinned `@latest` third-party gradient
 script loaded from a personal GitHub repo with no SRI.*
+
+## Site search
+
+Webflow's site search runs server-side on Webflow hosting and did not survive the static export.
+Replaced with a client-side index (`tools/build-search-index.mjs` generates `search-index.json`;
+[js/site-search.js](../js/site-search.js) queries it) in commit `2ad3f80`. Verified end-to-end in a
+real browser: [search.html](../search.html) renders ranked results, accent folding and no-match
+paths work, and every result link resolves. These are the remaining open items (noted 27 Jul 2026).
+
+- [ ] **Not yet live.** The fix sits on `fix/site-search`; it reaches visitors only once that merges
+      to `main` and Railway rebuilds. The rebuild is load-bearing: the [Dockerfile](../Dockerfile)
+      regenerates `search-index.json` from the pages in the build, so the committed copy can be
+      stale and still self-heal on deploy — but nothing happens until the merge and redeploy.
+- [ ] **Search is credentialed-only right now — decision needed before it can go public.** `/search`
+      sits behind the `basic_auth` gate restored in `d43bd20`, and the `/search*` matcher also covers
+      `/search-index.json` (deliberately — the index stores extracted body text for every gated page,
+      so exposing the JSON would leak their contents). A public visitor hitting `/search` therefore
+      gets a login prompt. **If public search is wanted:** first rebuild the index to exclude the
+      gated pages (add `company/`, `pricing/`, `products/`, `support*`, `solutions/{pubs,entertainment}`
+      to `SKIP_PAGES` in `tools/build-search-index.mjs`), *then* lift `/search` out of the gate — never
+      the other way round, or the JSON serves gated page text to anyone who requests it.
+- [ ] **No entry point in the UI.** Nothing in the site nav or footer links to `/search` on any of the
+      ~30 pages — it is reachable only by typing the URL. Moot while search is gated; revisit if it goes
+      public. Adding a link touches every page's nav and needs a desktop-vs-mobile placement call, so it
+      was left out rather than half-done — see the `morphDropdown` duplication note above: the nav is
+      copy-pasted into all 33 files, so this is 33 edits until that is extracted.
