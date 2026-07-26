@@ -62,7 +62,15 @@
 		# tools/build-sitemap.mjs parses this list, so keep it one path per token.
 		@gated path /company/* /pricing/* /products/* /search* /solutions/entertainment* /solutions/pubs* /support* /401*
 		basic_auth @gated {
-			{$SITE_USER:tlg} {$SITE_PASS_HASH:$2b$12$N.laQFCDzGtD9cehQKaF3.bUSYZ.ljFlR9fIAaClb5UwfnKVKg8iG}
+			# The real credential lives in the SITE_USER / SITE_PASS_HASH env vars
+			# on the Railway service, not here. This committed default is a hash of
+			# a random secret that was discarded at generation time, so it opens
+			# nothing: it exists only so `caddy validate` passes at image build,
+			# where no env is present. If the env vars are ever unset the gate
+			# fails closed (nobody gets in) rather than falling back to a password
+			# that would be readable in this file's git history. Rotate by setting
+			# a new SITE_PASS_HASH in Railway; this line never needs to change.
+			{$SITE_USER:tlg} {$SITE_PASS_HASH:$2b$12$eNi4b0dUAWUnkUWqk.5Ey.NKiHjHDpa2XaSiYxbZ0hCqJOhh1ApD.}
 		}
 
 		# URL canonicalisation. Position in this route is load-bearing twice
